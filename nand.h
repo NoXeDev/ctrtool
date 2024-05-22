@@ -7,6 +7,12 @@
 #define SIZE_HWCAL 0x9D0
 #define BLOCK_SIZE 4096
 
+// KEYSLOTS IDs DEFINITION
+#define KEY0x04 4
+#define KEY0x05 5
+#define KEY0x06 6
+#define KEY0x07 7
+
 typedef struct
 {
     u8 sig[0x100]; //RSA-2048 signature of the NCCH header, using SHA-256
@@ -112,7 +118,7 @@ typedef struct keyslots {
     u8 key0x05[0x10];
     u8 key0x06[0x10];
     u8 key0x07[0x10];
-} keyslots;
+} Keyslots;
 
 typedef struct {
     const u8 ID;
@@ -123,10 +129,11 @@ typedef struct {
     const u8 keyslotId;
 } Partitions;
 
+int initNandCrypto(FILE *ctrnand);
 int readNandBlock(FILE *ctrnand, long offset, size_t size, char* buffer);
 int extractEssentials(FILE *ctrnand, EssentialBackup *out);
 int decrypt_verify_otp(u8 *in, u8 *boot9buff, Otp *out);
-int setupKeyslots(const Otp *otp, u8 *boot9buff, keyslots *out);
+int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out);
 int getNandCryptoCid(const u8 *cid, u8 *out);
-int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *keyslot, u8 *cryptoCid, u8 *out);
-int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *keyslot, u8 *cryptoCid, FILE *outfile);
+int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, u8 *out);
+int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, FILE *outfile);

@@ -1,7 +1,49 @@
 #include "nand.h"
-#include "crypto.h"
 #include <string.h>
 #include <stdlib.h>
+
+#include "crypto.h"
+
+static Otp s_otp;
+static Keyslots s_ctrnandkeys;
+static EssentialBackup s_essentialsDatas;
+static u8 s_cryptoCid[0x10];
+
+u8 *getKeyslot(u32 keyslotId) {
+    switch (keyslotId) {
+        case KEY0x04:
+            return s_ctrnandkeys.key0x04;
+        case KEY0x05:
+            return s_ctrnandkeys.key0x05;
+        case KEY0x06:
+            return s_ctrnandkeys.key0x06;
+        case KEY0x07:
+            return s_ctrnandkeys.key0x07;
+        default:
+            fprintf(stderr, "Invalid keyslot ID: %d\n", keyslotId);
+            return NULL;
+    }
+}
+
+int initNandCrypto(FILE *ctrnand) {
+    // Read boot9
+    FILE* boot9 = fopen("boot9.bin", "rb");
+    u8 boot9buff[0x10000];
+    size_t bytes_read = fread(boot9buff, 1, 0x10000, boot9);
+    fclose(boot9);
+    
+    if(extractEssentials(ctrnand, &s_essentialsDatas) != 0) {
+        return 1; // Error parsing NAND
+    }
+
+    if(decrypt_verify_otp(s_essentialsDatas.otp, boot9buff, &s_otp) != 0) {
+        return 2; // Error decrypt & parsing OTP
+    }
+    
+    setupKeyslots(&s_otp, boot9buff, &s_ctrnandkeys);
+    getNandCryptoCid(s_essentialsDatas.nand_cid, s_cryptoCid);
+    return 0; // OK
+}
 
 int readNandBlock(FILE *ctrnand, long offset, size_t size, char* buffer) {
     if (fseek(ctrnand, offset, SEEK_SET) != 0) {
@@ -57,7 +99,7 @@ int decrypt_verify_otp(u8 *in, u8 *boot9buff, Otp *out) {
     return 0;
 }
 
-int setupKeyslots(const Otp *otp, u8 *boot9buff, keyslots *out) {
+int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out) {
     u8 tmp[0x40];
     memcpy(&tmp, &otp->random, 0x1C);
     memcpy(&tmp[0x1C], &boot9buff[0xd860], 0x24);
@@ -110,14 +152,14 @@ int getNandCryptoCid(const u8 *cid, u8 *out) {
     return 0;
 }
 
-int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *keyslot, u8 *cryptoCid, u8 *out) {
+int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, u8 *out) {
     u32 block_count = size / BLOCK_SIZE;
     u8 rawblock[BLOCK_SIZE];
 
     u8 counter[0x10];
     u8 shiftedOffset[0x10];
     u32_to_u8_buff(offset >> 4, shiftedOffset);
-    n128_add(cryptoCid, shiftedOffset, counter);
+    n128_add(s_cryptoCid, shiftedOffset, counter);
 
     u32 outoffset = 0;
     do {
@@ -126,6 +168,7 @@ int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *keyslot, u8 
             printf("Error reading nand partition\n");
             return 1;
         }
+        u8 *keyslot = getKeyslot(keyslotId);
         u32 len = aes_ctr_128_decrypt(rawblock, out + outoffset, keyslot, counter, BLOCK_SIZE, block_count == 0);
         if(len == 1) {
             printf("Error decrypting nand partition\n");
@@ -136,13 +179,13 @@ int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *keyslot, u8 
         outoffset += BLOCK_SIZE;
 
         u32_to_u8_buff(offset >> 4, shiftedOffset);
-        n128_add(cryptoCid, shiftedOffset, counter);
+        n128_add(s_cryptoCid, shiftedOffset, counter);
     }
     while(block_count--);
     return 0;
 }
 
-int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *keyslot, u8 *cryptoCid, FILE *outfile) {
+int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, FILE *outfile) {
     u32 block_count = size / BLOCK_SIZE;
     s32 final_block = size % BLOCK_SIZE;
 
@@ -152,7 +195,7 @@ int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *
     u8 counter[0x10];
     u8 shiftedOffset[0x10];
     u32_to_u8_buff(offset >> 4, shiftedOffset);
-    n128_add(cryptoCid, shiftedOffset, counter);
+    n128_add(s_cryptoCid, shiftedOffset, counter);
 
     do {
         int res = readNandBlock(ctrnand, offset, block_count == 0 ? final_block : BLOCK_SIZE, (char *)rawblock);
@@ -160,6 +203,7 @@ int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *
             printf("Error reading nand partition\n");
             return 1;
         }
+        u8 *keyslot = getKeyslot(keyslotId);
         u32 len = aes_ctr_128_decrypt(rawblock, decryptedblock, keyslot, counter, block_count == 0 ? final_block : BLOCK_SIZE, (block_count == 0) && (final_block == 0));
         if(len == 1) {
             printf("Error decrypting nand partition\n");
@@ -170,7 +214,7 @@ int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u8 *
         offset += BLOCK_SIZE;
 
         u32_to_u8_buff(offset >> 4, shiftedOffset);
-        n128_add(cryptoCid, shiftedOffset, counter);
+        n128_add(s_cryptoCid, shiftedOffset, counter);
 
         if(block_count == 0) {
             final_block = -1;
