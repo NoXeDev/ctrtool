@@ -133,10 +133,11 @@ typedef struct {
 
 int initNandCrypto(FILE *ctrnand);
 bool isNandInit();
+int isNew3DS(FILE *ctrnand);
 int readNandBlock(FILE *ctrnand, long offset, size_t size, char* buffer);
 int extractEssentials(FILE *ctrnand, EssentialBackup *out);
 int decrypt_verify_otp(u8 *in, u8 *boot9buff, Otp *out);
-int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out);
+int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out, bool isN3DS);
 int getNandCryptoCid(const u8 *cid, u8 *out);
 int readFsNandBlock(FILE *ctrnand, u32 offset, u32 count, u32 keyslotId, u8 *out);
 int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, FILE *outfile);

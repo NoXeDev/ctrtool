@@ -15,9 +15,6 @@
 #include <stdbool.h>
 #include "../nand.h"
 
-#define OLDCTRNAND		0
-#define NEWCTRNAND		1
-
 #define OLDCTRNAND_OFFSET 0x0B95CA00
 #define NEWCTRNAND_OFFSET 0x0B95AE00
 
@@ -46,10 +43,6 @@ DSTATUS disk_initialize (
 	BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
-	if(pdrv == NEWCTRNAND) {
-		return STA_NODISK; // New 3DS NAND not supported for now
-	}
-
 	if (nandFile != NULL && isNandInit()) {
         return RES_OK; // nand file already open
     }
@@ -87,9 +80,9 @@ DRESULT disk_read (
     
     int res = readFsNandBlock(
 		nandFile, 
-		(pdrv == OLDCTRNAND ? OLDCTRNAND_OFFSET : NEWCTRNAND_OFFSET) + (sector * 512), 
+		(isNew3DS(nandFile) == 0 ? OLDCTRNAND_OFFSET : NEWCTRNAND_OFFSET) + (sector * 512), 
 		count, 
-		(pdrv == OLDCTRNAND ? KEY0x04 : KEY0x05), 
+		(isNew3DS(nandFile) == 0 ? KEY0x04 : KEY0x05),
 		buff
 	);
 

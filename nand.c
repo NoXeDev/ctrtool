@@ -8,6 +8,7 @@ static Keyslots s_ctrnandkeys;
 static EssentialBackup s_essentialsDatas;
 static u8 s_cryptoCid[0x10];
 static bool s_isNandInit = false;
+static bool s_isEssentialsParsed = false;
 
 bool isNandInit() {
     return s_isNandInit;
@@ -29,6 +30,21 @@ u8 *getKeyslot(u32 keyslotId) {
     }
 }
 
+int isNew3DS(FILE *ctrnand) {
+    if(!s_isEssentialsParsed) {
+        if(extractEssentials(ctrnand, &s_essentialsDatas) != 0) {
+            return -1; // Error parsing NAND
+        }
+        s_isEssentialsParsed = true;
+    }
+
+    if((char) s_essentialsDatas.secinfo.serial[0] == 'Y' || (char) s_essentialsDatas.secinfo.serial[0] == 'Q' || (char) s_essentialsDatas.secinfo.serial[0] == 'N') {
+        return 1; // New 3DS
+    } else {
+        return 0; // Old 3DS
+    }
+}
+
 int initNandCrypto(FILE *ctrnand) {
     // Read boot9
     FILE* boot9 = fopen("boot9.bin", "rb");
@@ -36,15 +52,18 @@ int initNandCrypto(FILE *ctrnand) {
     size_t bytes_read = fread(boot9buff, 1, 0x10000, boot9);
     fclose(boot9);
     
-    if(extractEssentials(ctrnand, &s_essentialsDatas) != 0) {
-        return 1; // Error parsing NAND
+    if(!s_isEssentialsParsed) {
+        if(extractEssentials(ctrnand, &s_essentialsDatas) != 0) {
+            return 1; // Error parsing NAND
+        }
+        s_isEssentialsParsed = true;
     }
 
     if(decrypt_verify_otp(s_essentialsDatas.otp, boot9buff, &s_otp) != 0) {
         return 2; // Error decrypt & parsing OTP
     }
     
-    setupKeyslots(&s_otp, boot9buff, &s_ctrnandkeys);
+    setupKeyslots(&s_otp, boot9buff, &s_ctrnandkeys, isNew3DS(ctrnand));
     getNandCryptoCid(s_essentialsDatas.nand_cid, s_cryptoCid);
     s_isNandInit = true;
     return 0; // OK
@@ -104,7 +123,7 @@ int decrypt_verify_otp(u8 *in, u8 *boot9buff, Otp *out) {
     return 0;
 }
 
-int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out) {
+int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out, bool isN3DS) {
     u8 tmp[0x40];
     memcpy(&tmp, &otp->random, 0x1C);
     memcpy(&tmp[0x1C], &boot9buff[0xd860], 0x24);
@@ -137,7 +156,12 @@ int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out) {
     }
 
     keyscrambler(KeyX0x04_0x07, &boot9buff[0xDA50], out->key0x04);
-    keyscrambler(KeyX0x04_0x07, &boot9buff[0xDA50+0x10], out->key0x05);
+    if(isN3DS) {
+        u8 keyY0x05[0x10] = {0x4D, 0x80, 0x4F, 0x4E, 0x99, 0x90, 0x19, 0x46, 0x13, 0xA2, 0x04, 0xAC, 0x58, 0x44, 0x60, 0xBE};
+        keyscrambler(KeyX0x04_0x07, keyY0x05, out->key0x05);
+    } else {
+        keyscrambler(KeyX0x04_0x07, &boot9buff[0xDA50+0x10], out->key0x05);
+    }
     keyscrambler(KeyX0x04_0x07, &boot9buff[0xDA50+0x20], out->key0x06);
     keyscrambler(KeyX0x04_0x07, &boot9buff[0xDA50+0x30], out->key0x07);
     

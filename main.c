@@ -29,6 +29,7 @@ Partitions partitions[] = {
     {1, "firm0", "Firmware partition.", 0x0B130000, 0x00400000, KEY0x06},
     {2, "firm1", "Firmware partition. (Backup partition, same as above)", 0x0B530000, 0x00400000, KEY0x06},
     {3, "nand", "CTR-NAND FAT16 File System. (OLD 3DS)", 0x0B95CA00, 0x2F3E3600, KEY0x04},
+    {4, "nand", "CTR-NAND FAT16 File System. (NEW 3DS)", 0x0B95AE00, 0x41D2D200, KEY0x05},
     {0, NULL, NULL, 0, 0, 0}
 };
 
@@ -62,7 +63,7 @@ void extractpart(int argc, char *argv[]) {
     }
 
     int partition_id = atoi(argv[1]);
-    if (partition_id < 1 || partition_id > 3) {
+    if (partition_id < 1 || partition_id > 4) {
         fprintf(stderr, "Invalid partition number: %s\n", argv[1]);
         return;
     }
@@ -78,6 +79,14 @@ void extractpart(int argc, char *argv[]) {
 
     // Open nand file and bootrom file
     FILE* ctrnand = fopen("ctrnand.bin", "rb");
+
+    if(isNew3DS(ctrnand) && selectedPartition->ID == 3) {
+        printf("This partition is only available on OLD 3DS\n");
+        return;
+    } else if(!isNew3DS(ctrnand) && selectedPartition->ID == 4) {
+        printf("This partition is only available on NEW 3DS\n");
+        return;
+    }
 
     if(0 != initNandCrypto(ctrnand)) {
         printf("Failed to init nand crypto\n");
@@ -95,7 +104,7 @@ void extractpart(int argc, char *argv[]) {
 
 void list_dir(int argc, char *argv[]) {
     FATFS fs;
-    int res = f_mount(&fs, "oldctrnand:", 1);
+    int res = f_mount(&fs, "", 1);
     if(res != FR_OK) {
         printf("Failed to mount filesystem\n");
         return;
