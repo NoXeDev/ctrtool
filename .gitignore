@@ -2,5 +2,5 @@
 *.img
 *.exe
 .vscode
-build
-.xmake
+build/
+bin/

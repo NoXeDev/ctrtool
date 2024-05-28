@@ -117,7 +117,11 @@ int hash_sha256(const u8 *in, u8 *out, u32 len) {
 int check_otp(u8 *otp) {
     u8 calculed_hash[0x20];
     
-    u32 len = hash_sha256(otp, calculed_hash, 0xE0);
+    int len = hash_sha256(otp, calculed_hash, 0xE0);
+    if(len == -1 || len == 0) {
+        printf("Error hashing otp\n");
+        return 1;
+    }
 
     for(int i = 0; i < 0x20; i++) {
         if(calculed_hash[i] != otp[0xE0+i]) {
