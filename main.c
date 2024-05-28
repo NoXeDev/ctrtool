@@ -5,6 +5,9 @@
 
 #include "nand.h"
 
+#include "fatfs/ff.h"
+void disk_deinitialize(void);
+
 typedef struct {
     const char *name;
     const char *description;
@@ -13,9 +16,12 @@ typedef struct {
 
 void command_help(int argc, char *argv[]);
 void extractpart(int argc, char *argv[]);
+void list_dir(int argc, char *argv[]);
+
 Command commands[] = {
     {"help", "Show help pannel", command_help},
     {"extractpart", "Decrypt and extract a nand partition ", extractpart},
+    {"listdir", "List all files and dirs into CTRNAND partition", list_dir},
     {NULL, NULL, NULL}
 };
 
@@ -85,6 +91,37 @@ void extractpart(int argc, char *argv[]) {
     printf("Partition %s extracted to %s\n", selectedPartition->name, out_path);
     // Close nand file
     fclose(ctrnand);
+}
+
+void list_dir(int argc, char *argv[]) {
+    FATFS fs;
+    int res = f_mount(&fs, "oldctrnand:", 1);
+    if(res != FR_OK) {
+        printf("Failed to mount filesystem\n");
+        return;
+    }
+
+    FILINFO fno;
+    DIR dir;
+    res = f_opendir(&dir, "/");
+    if(res != FR_OK) {
+        printf("Failed to open directory\n");
+        return;
+    }
+
+    while (1) {
+        res = f_readdir(&dir, &fno); 
+        if (res != FR_OK || fno.fname[0] == 0) {
+            break;  // Break on error or end of directory
+        }
+        if (fno.fattrib & AM_DIR) {
+            printf("[DIR]  %s\n", fno.fname);  // It's a directory
+        } else {
+            printf("[FILE] %s\n", fno.fname);  // It's a file
+        }
+    }
+    f_closedir(&dir);
+    disk_deinitialize();
 }
 
 int main(int argc, char *argv[]) {

@@ -2,10 +2,12 @@
 #include "utils.h"
 #include "exefs.h"
 #include <stdio.h>
+#include <stdbool.h>
 
 // size of /ro/sys/HWCAL0.dat and /ro/sys/HWCAL1.dat
 #define SIZE_HWCAL 0x9D0
-#define BLOCK_SIZE 4096
+#define DUMP_BLOCK_SIZE 4096
+#define FATFS_BLOCK_SIZE 512
 
 // KEYSLOTS IDs DEFINITION
 #define KEY0x04 4
@@ -130,10 +132,11 @@ typedef struct {
 } Partitions;
 
 int initNandCrypto(FILE *ctrnand);
+bool isNandInit();
 int readNandBlock(FILE *ctrnand, long offset, size_t size, char* buffer);
 int extractEssentials(FILE *ctrnand, EssentialBackup *out);
 int decrypt_verify_otp(u8 *in, u8 *boot9buff, Otp *out);
 int setupKeyslots(const Otp *otp, u8 *boot9buff, Keyslots *out);
 int getNandCryptoCid(const u8 *cid, u8 *out);
-int decrypt_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, u8 *out);
+int readFsNandBlock(FILE *ctrnand, u32 offset, u32 count, u32 keyslotId, u8 *out);
 int decrypt_and_extract_nand_partition(FILE *ctrnand, u32 offset, u32 size, u32 keyslotId, FILE *outfile);
