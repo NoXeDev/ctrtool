@@ -48,6 +48,10 @@ int isNew3DS(FILE *ctrnand) {
 int initNandCrypto(FILE *ctrnand) {
     // Read boot9
     FILE* boot9 = fopen("boot9.bin", "rb");
+    if(boot9 == NULL) {
+        perror("Err opening boot9.bin");
+        return 3; // Error opening boot9
+    }
     u8 boot9buff[0x10000];
     size_t bytes_read = fread(boot9buff, 1, 0x10000, boot9);
     fclose(boot9);
